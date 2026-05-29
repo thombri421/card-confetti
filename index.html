@@ -575,7 +575,10 @@ function rarShort(r) {
     'Rare Holo EX':'EX','Rare Holo GX':'GX','Rare Ultra':'UR','Rare Holo Star':'★','Rare BREAK':'BRK'}[r] || '';
 }
 function ebayUrl(c) {
-  return 'https://www.ebay.com/sch/i.html?_nkw='+encodeURIComponent((c.name||'')+' '+c.number+' '+cSet(c)+' pokemon card')+'&_sacat=2536&LH_BIN=1';
+  const q = encodeURIComponent((c.name||'')+' '+(c.number||'')+' '+cSet(c)+' pokemon card');
+  const target = 'https://www.ebay.com/sch/i.html?_nkw='+q+'&_sacat=2536&LH_BIN=1';
+  // EPN affiliate tracking parameters
+  return target+'&mkevt=1&mkcid=1&mkrid=711-53200-19255-0&campid=5339155010&toolid=10001';
 }
 function bulbaUrl(c) {
   return 'https://bulbapedia.bulbagarden.net/wiki/'+encodeURIComponent(c.name||'')+'_(card)';
