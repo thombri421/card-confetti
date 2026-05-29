@@ -326,6 +326,13 @@ select{padding:7px 10px;background:#fff;border:1px solid var(--borderl);border-r
       <div class="fg"><label class="fl">Name</label><input type="text" class="fi" id="bName" placeholder="e.g. My Ocean Collection"></div>
       <div class="fg"><label class="fl">Color</label><div class="swatches" id="bSwatches"></div></div>
       <div class="fg"><label class="fl">Layout</label><div class="layouts" id="bLayouts"></div></div>
+      <div class="fg">
+        <label class="fl">Fill from Tag (optional)</label>
+        <select class="fi" id="bTag">
+          <option value="">No tag — start empty</option>
+        </select>
+        <div id="bTagPreview" style="display:none;margin-top:6px;font-size:12px;color:var(--soft)"></div>
+      </div>
     </div>
     <div class="mfoot">
       <button class="btn" id="cancelBinder" style="flex:1">Cancel</button>
@@ -364,11 +371,46 @@ const FULL_ART_Q = [
 
 // Preset tag suggestions — user can also create their own
 const PRESET_TAGS = [
+  // Types
   'Fire','Water','Grass','Electric','Psychic','Dark','Ghost','Fairy','Dragon','Steel',
+  'Fighting','Normal','Poison','Ground','Flying','Bug','Rock','Ice',
+  // Aesthetic vibes
   'Girly','Cottagecore','Galaxy','Pastel','Vintage','Holographic','Gothic','Kawaii','Neon',
+  'Rainbow','Gold','Full Art','Illustration','Favourite','Shiny',
+  // Regions
   'Kanto','Johto','Hoenn','Sinnoh','Unova','Kalos','Alola','Galar','Paldea','Hisui',
-  'Legendary','Mythical','Starters','Eeveelutions','Shiny',
-  'Full Art','Rainbow','Gold','Illustration','Favourite',
+  // Special
+  'Legendary','Mythical','Starters','Eeveelutions',
+  // Nature & Environment
+  'Forest Pokémon','Deep Ocean','Mountain & Cave','Jungle','Desert','Arctic & Snow',
+  'Swamp & Marsh','Volcano & Lava','Sky & Clouds','Rainstorm','Beach','Waterfall',
+  'Flower Field','Autumn Forest','Spring Blossom','Thunderstorm','Aurora Borealis',
+  'Space & Cosmic','Underwater Ruins','Crystal Cave',
+  // Time & Mood
+  'Sleeping Pokémon','Dream-Themed','Nighttime','Sunset','Dawn & Sunrise',
+  'Cozy & Campfire','Haunted Midnight','Slice of Life','Festival & Fireworks',
+  'Rainy Day','Winter Holiday','Peaceful Village','Adventure & Travel',
+  'Wandering','Wilderness','Nostalgic',
+  // Mythology & Fantasy
+  'Mythology','Yokai & Spirits','Knights & Castles','Ancient Civilization',
+  'Divine & Godlike','Dragons & Legends','Fairy Forest','Witch & Magic',
+  'Celestial','Moon & Night','Time Travel','Ancient Relics','Sacred Shrine',
+  'Medieval Fantasy','Monster Hunter','Eclipse','Tarot-Inspired',
+  // Food & Cozy
+  'Food-Loving','Bakery & Café','Tea Party','Berry-Themed','Cooking Scenes',
+  'Harvest','Candy & Dessert','Picnic','Farm Life','Fishing Village',
+  'Cozy Kitchen','Street Market','Camp Cooking','Fruit-Themed',
+  // Dark & Atmospheric
+  'Abandoned Places','Ruins & Temples','Deep Cave','Night City','Cyberpunk',
+  'Fog & Mist','Shadow','Moonlit Forest','Storm at Sea','Post-Apocalyptic',
+  'Glitch & Paradox','Lost World','Underground','Monochrome',
+  // Cute Lifestyle
+  'Relaxing at Home','Sleeping Together','Friendship','Pokémon with Humans',
+  'Reading & Studying','Music & Concerts','Dancing','Gardening','Family',
+  'Tiny Pokémon','Shopping & Travel','Playing Sports','Pets Being Pets',
+  // Space & Cosmic
+  'Galaxy Holo','Moon-Themed','Starry Night','Ultra Beasts','Constellation',
+  'Void & Black Hole','Space Exploration','Meteor & Crystal','Cosmic Horror',
 ];
 
 const COLORS = ['#F97FA0','#FFD740','#C4B5F8','#F05580','#5BAD6F',
@@ -1309,13 +1351,62 @@ function openNewBinder() {
   lp.querySelectorAll('.lopt').forEach(el=>el.addEventListener('click',()=>{
     S.nb.layout=el.dataset.lid; lp.querySelectorAll('.lopt').forEach(o=>o.classList.remove('on')); el.classList.add('on');
   }));
+  // populate tag select
+  const tagSel = document.getElementById('bTag');
+  tagSel.innerHTML = '<option value="">No tag — start empty</option>'
+    + S.allTags.map(t => {
+        const count = Object.values(S.tags).filter(ts => ts.includes(t)).length;
+        return '<option value="'+t+'">'+t+' ('+count+' card'+(count!==1?'s':'')+')</option>';
+      }).join('');
+  tagSel.value = '';
+  document.getElementById('bTagPreview').style.display = 'none';
+  tagSel.onchange = () => {
+    const tag = tagSel.value;
+    const preview = document.getElementById('bTagPreview');
+    if (!tag) { preview.style.display='none'; return; }
+    // auto-set binder name to tag name if name is empty
+    const nameEl = document.getElementById('bName');
+    if (!nameEl.value.trim()) nameEl.value = tag;
+    // pick color based on tag
+    const colorIdx = tag.split('').reduce((a,c)=>a+c.charCodeAt(0),0) % COLORS.length;
+    const sw = document.getElementById('bSwatches');
+    sw.querySelectorAll('.swatch').forEach(s => s.classList.remove('on'));
+    const match = [...sw.querySelectorAll('.swatch')].find(s => s.dataset.c === COLORS[colorIdx]);
+    if (match) { match.classList.add('on'); S.nb.color = COLORS[colorIdx]; }
+    // show preview
+    const count = Object.values(S.tags).filter(ts => ts.includes(tag)).length;
+    preview.style.display = 'block';
+    preview.innerHTML = '<i class="ti ti-wand" style="font-size:12px"></i> Will auto-fill '
+      + count + ' card' + (count!==1?'s':'') + ' from your "'+tag+'" tag';
+  };
   document.getElementById('binderOv').classList.add('open');
 }
 function createBinder() {
-  const name=document.getElementById('bName').value.trim(); if(!name) return;
-  const id='b_'+Date.now();
-  S.binders[id]={name,color:S.nb.color,layout:S.nb.layout,pages:[makeSlots(S.nb.layout)],created:Date.now()};
-  save(); document.getElementById('binderOv').classList.remove('open'); renderBinderNav(); navBinder(id,'layout');
+  const name = document.getElementById('bName').value.trim(); if (!name) return;
+  const tag  = document.getElementById('bTag').value;
+  const id   = 'b_'+Date.now();
+  const layout = S.nb.layout;
+  const l    = LAYOUTS.find(x=>x.id===layout)||LAYOUTS[1];
+  const spp  = l.cols*l.rows;
+
+  if (tag) {
+    // fill from tag
+    const cardIds = Object.entries(S.tags).filter(([,ts])=>ts.includes(tag)).map(([id])=>id);
+    const pages = [];
+    for (let i=0; i<Math.max(cardIds.length,1); i+=spp) {
+      const page = cardIds.slice(i, i+spp);
+      while (page.length < spp) page.push(null);
+      pages.push(page);
+    }
+    S.binders[id] = { name, color:S.nb.color, layout, pages, created:Date.now(), tag };
+  } else {
+    S.binders[id] = { name, color:S.nb.color, layout, pages:[makeSlots(layout)], created:Date.now() };
+  }
+
+  save();
+  document.getElementById('binderOv').classList.remove('open');
+  renderBinderNav();
+  navBinder(id, 'layout');
 }
 
 // ─── GLOBAL EVENTS ───────────────────────────────────────────
