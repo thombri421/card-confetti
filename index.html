@@ -229,6 +229,8 @@ select{padding:7px 10px;background:#fff;border:1px solid var(--borderl);border-r
 .sri-info{flex:1;min-width:0}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--rose200);border-radius:2px}
 .disc-hub-card:hover{border-color:var(--rose400)!important}
+.inline-tag-input:focus{border-color:var(--rose400)!important;outline:none}
+.inline-tag-input{transition:border-color .13s}
 .disc-set-card:hover{border-color:var(--rose400)!important}
 .type-filter-wrap{position:relative}
 .type-filter-wrap i{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--soft);font-size:14px;pointer-events:none}
@@ -438,7 +440,7 @@ const S = {
   wanted: {},
   binders: {},
   votes: {},
-  tags: {},   // cardId -> [tag, tag, tag] (up to 3)
+  tags: {},   // cardId -> [tag, tag, tag, tag, tag] (up to 5)
   allTags: [], // all tag names user has created
   detailCard: null,
   activeTag: null,
@@ -465,6 +467,44 @@ function load() {
     S.allTags    = d.allTags    || [];
   } catch(e) {}
 }
+// Refresh just the tag row for one card in the search results — no full re-render
+function refreshInlineTags(cardId, container) {
+  const wrap = container ? container.querySelector('.inline-tags[data-card-id="'+cardId+'"]') : null;
+  if (!wrap) return;
+  const cardTags = S.tags[cardId] || [];
+  wrap.innerHTML = cardTags.map(t =>
+    '<span style="background:var(--lav100);border:1px solid var(--lav300);color:var(--lav500);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:3px">'
+    +t+'<button class="inline-tag-rm" data-card-id="'+cardId+'" data-tag="'+t+'" style="background:none;border:none;color:var(--lav500);cursor:pointer;font-size:10px;padding:0;line-height:1;margin-left:1px">×</button></span>'
+  ).join('')
+  + (cardTags.length < 5
+      ? '<input class="inline-tag-input" data-card-id="'+cardId+'" type="text" placeholder="+ tag" list="inlineTagList" style="border:1px dashed var(--borderl);border-radius:20px;padding:2px 8px;font-size:10px;font-family:var(--font);outline:none;background:none;color:var(--soft);width:70px;cursor:pointer" class="itag-inp-focus">'
+      : '');
+  // re-attach listeners
+  wrap.querySelectorAll('.inline-tag-rm').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      removeTagFromCard(btn.dataset.cardId, btn.dataset.tag);
+      refreshInlineTags(btn.dataset.cardId, container);
+    });
+  });
+  wrap.querySelectorAll('.inline-tag-input').forEach(input => {
+    input.addEventListener('keydown', e => {
+      if (e.key==='Enter') {
+        e.preventDefault();
+        const val = input.value.trim();
+        if (val && addTagToCard(cardId, val)) { input.value=''; refreshInlineTags(cardId, container); }
+      }
+    });
+    input.addEventListener('blur', () => {
+      const val = input.value.trim();
+      if (val && addTagToCard(cardId, val)) { input.value=''; refreshInlineTags(cardId, container); }
+    });
+  });
+  // update datalist
+  const dl = container ? container.querySelector('#inlineTagList') : null;
+  if (dl) dl.innerHTML = [...new Set([...S.allTags,...PRESET_TAGS])].sort().map(t=>'<option value="'+t+'">').join('');
+}
+
 function rebuildAllTags() {
   const set = new Set(S.allTags);
   Object.values(S.tags).forEach(ts => ts.forEach(t => set.add(t)));
@@ -476,7 +516,7 @@ function addTagToCard(cardId, tag) {
   if (!clean) return false;
   const current = S.tags[cardId] || [];
   if (current.includes(clean)) return false;
-  if (current.length >= 3) return false;
+  if (current.length >= 5) return false;
   S.tags[cardId] = [...current, clean];
   if (!S.allTags.includes(clean)) { S.allTags = [...S.allTags, clean].sort(); }
   save();
@@ -553,15 +593,16 @@ async function fetchAny(extraQ, page, pageSize) {
 
 async function fetchByIds(ids) {
   if (!ids.length) return [];
-  const out = [];
-  for (let i = 0; i < ids.length; i += 20) {
-    const chunk = ids.slice(i, i+20);
+  // Fire all chunks in parallel for speed
+  const chunks = [];
+  for (let i = 0; i < ids.length; i += 20) chunks.push(ids.slice(i, i+20));
+  const results = await Promise.all(chunks.map(async chunk => {
     try {
       const d = await api('/cards', { q: chunk.map(id => 'id:'+id).join(' OR '), pageSize: 20 });
-      out.push(...(d.data||[]));
-    } catch(e) {}
-  }
-  return out;
+      return d.data || [];
+    } catch(e) { return []; }
+  }));
+  return results.flat();
 }
 
 async function searchFullArt(query) {
@@ -573,8 +614,8 @@ async function searchFullArt(query) {
   } else {
     nameQ = 'name:"'+query.trim()+'*"';
   }
-  // Search all cards — not just full arts
-  const d = await api('/cards', { q: nameQ, pageSize: 30, orderBy: 'name' });
+  // orderBy name is faster than rarity for search
+  const d = await api('/cards', { q: nameQ, pageSize: 24, orderBy: 'name' });
   const cards = d.data || [];
   const ql = (parts.length>1 && /^\d+$/.test(last) ? parts.slice(0,-1).join(' ') : query.trim()).toLowerCase();
   return cards.sort((a,b) => {
@@ -1318,11 +1359,20 @@ function attachListeners() {
             return;
           }
           res2.innerHTML = '<div style="font-size:11px;color:var(--soft);margin:8px 0 6px">'+cards.length+' result'+(cards.length!==1?'s':'')+' for "'+v+'"</div>'
-            +'<div style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto">'
+            +'<div style="display:flex;flex-direction:column;gap:8px;max-height:480px;overflow-y:auto" id="addCardList">'
             +cards.map(c => {
               const owned = S.collection[c.id];
               const img = cImg(c);
-              return '<div class="sri">'
+              const cardTags = S.tags[c.id] || [];
+              const tagHTML = '<div class="inline-tags" data-card-id="'+c.id+'" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;align-items:center">'
+                + cardTags.map(t => '<span style="background:var(--lav100);border:1px solid var(--lav300);color:var(--lav500);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:3px">'
+                    +t+'<button class="inline-tag-rm" data-card-id="'+c.id+'" data-tag="'+t+'" style="background:none;border:none;color:var(--lav500);cursor:pointer;font-size:10px;padding:0;line-height:1;margin-left:1px">×</button></span>').join('')
+                + (cardTags.length < 5
+                    ? '<input class="inline-tag-input" data-card-id="'+c.id+'" type="text" placeholder="+ tag" list="inlineTagList" style="border:1px dashed var(--borderl);border-radius:20px;padding:2px 8px;font-size:10px;font-family:var(--font);outline:none;background:none;color:var(--soft);width:70px;cursor:pointer" class="itag-inp-focus">'
+                    : '')
+                + '</div>';
+              return '<div class="sri" style="flex-direction:column;align-items:flex-start;gap:6px">'
+                +'<div style="display:flex;align-items:center;gap:9px;width:100%">'
                 +(img ? '<img class="sri-img" src="'+img+'" alt="'+c.name+'" loading="lazy">'
                       : '<div class="sri-img" style="display:flex;align-items:center;justify-content:center"><i class="ti ti-photo" style="color:var(--soft)"></i></div>')
                 +'<div class="sri-info">'
@@ -1330,12 +1380,48 @@ function attachListeners() {
                 +'<div style="font-size:11px;color:var(--rose500);font-weight:700;margin-top:1px">'+cNum(c)+' · '+cSet(c)+'</div>'
                 +'<div style="font-size:10px;color:var(--soft);margin-top:1px">'+cRar(c)+'</div>'
                 +'</div>'
-                +'<div style="flex-shrink:0">'
+                +'<div style="flex-shrink:0;margin-left:auto">'
                 +(owned
                   ? '<button class="btn owned-btn add-toggle" data-id="'+c.id+'" style="padding:5px 10px;font-size:11px">✓ Owned</button>'
                   : '<button class="btn primary add-toggle" data-id="'+c.id+'" style="padding:5px 10px;font-size:11px">+ Add</button>')
-                +'</div></div>';
-            }).join('')+'</div>';
+                +'</div></div>'
+                + tagHTML
+                +'</div>';
+            }).join('')+'</div>'
+            +'<datalist id="inlineTagList">'+[...new Set([...S.allTags,...PRESET_TAGS])].sort().map(t=>'<option value="'+t+'">').join('')+'</datalist>';
+          // attach inline tag inputs
+          res2.querySelectorAll('.inline-tag-input').forEach(input => {
+            input.addEventListener('keydown', e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                const cardId = input.dataset.cardId;
+                const val = input.value.trim();
+                if (val && addTagToCard(cardId, val)) {
+                  input.value = '';
+                  refreshInlineTags(cardId, res2);
+                } else if ((S.tags[cardId]||[]).length >= 5) {
+                  alert('Maximum 5 tags per card.');
+                }
+              }
+            });
+            // also add on blur if value present
+            input.addEventListener('blur', () => {
+              const cardId = input.dataset.cardId;
+              const val = input.value.trim();
+              if (val && addTagToCard(cardId, val)) {
+                input.value = '';
+                refreshInlineTags(cardId, res2);
+              }
+            });
+          });
+          res2.querySelectorAll('.inline-tag-rm').forEach(btn => {
+            btn.addEventListener('click', e => {
+              e.stopPropagation();
+              removeTagFromCard(btn.dataset.cardId, btn.dataset.tag);
+              refreshInlineTags(btn.dataset.cardId, res2);
+            });
+          });
+
           // attach add toggles
           res2.querySelectorAll('.add-toggle').forEach(btn => {
             btn.addEventListener('click', e => {
@@ -1567,7 +1653,7 @@ function renderDetailTags(cardId) {
   if (!input || !addBtn) return;
   // hide input if at limit
   const inputWrap = document.getElementById('dTagInput');
-  if (inputWrap) inputWrap.style.display = current.length >= 3 ? 'none' : 'flex';
+  if (inputWrap) inputWrap.style.display = current.length >= 5 ? 'none' : 'flex';
   // populate datalist suggestions
   if (datalist) {
     datalist.innerHTML = getTagSuggestions(cardId).map(t => '<option value="'+t+'">').join('');
@@ -1583,8 +1669,8 @@ function renderDetailTags(cardId) {
     if (addTagToCard(cardId, val)) {
       document.getElementById('dTagQ').value = '';
       renderDetailTags(cardId);
-    } else if ((S.tags[cardId]||[]).length >= 3) {
-      alert('Maximum 3 tags per card.');
+    } else if ((S.tags[cardId]||[]).length >= 5) {
+      alert('Maximum 5 tags per card.');
     }
   });
   document.getElementById('dTagQ').addEventListener('keydown', e => {
