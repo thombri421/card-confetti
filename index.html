@@ -12,7 +12,7 @@
   --cream:#FFFBF4;--cream2:#FFF4E6;
   --rose100:#FFE8EE;--rose200:#FFCDD9;--rose300:#FFAABE;--rose400:#F97FA0;--rose500:#F05580;--rose600:#D63A66;
   --lav100:#F0ECFF;--lav200:#DDD5FF;--lav300:#C4B5F8;--lav500:#8B6EE0;
-  --gold300:#FFD740;--gold500:#E0A800;
+  --gold100:#FFF4CC;--gold300:#FFD740;--gold500:#E0A800;
   --green100:#d4f5e2;--green600:#1a6b3a;--green700:#27ae60;
   --ink:#2A1638;--soft:#7A5A8A;
   --border:rgba(240,85,128,0.15);--borderl:rgba(200,160,220,0.22);
@@ -228,6 +228,8 @@ select{padding:7px 10px;background:#fff;border:1px solid var(--borderl);border-r
 .sri-img{width:40px;border-radius:5px;flex-shrink:0;aspect-ratio:2.5/3.5;object-fit:cover;background:var(--cream2)}
 .sri-info{flex:1;min-width:0}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--rose200);border-radius:2px}
+.disc-hub-card:hover{border-color:var(--rose400)!important}
+.disc-set-card:hover{border-color:var(--rose400)!important}
 .type-filter-wrap{position:relative}
 .type-filter-wrap i{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--soft);font-size:14px;pointer-events:none}
 .type-filter-wrap input{width:160px;padding:7px 10px 7px 28px;background:#fff;border:1px solid var(--borderl);border-radius:8px;color:var(--ink);font-size:13px;font-family:var(--font);outline:none}
@@ -264,6 +266,9 @@ select{padding:7px 10px;background:#fff;border:1px solid var(--borderl);border-r
       <div class="nav-item active" id="nav-home" data-v="home"><i class="ti ti-layout-dashboard"></i> Dashboard</div>
       <div class="nav-item" id="nav-add" data-v="add"><i class="ti ti-search"></i> Find Cards</div>
       <div class="nav-item" id="nav-discover" data-v="discover"><i class="ti ti-sparkles"></i> Discover</div>
+      <div class="nav-item" id="nav-disc-set" data-v="disc-set" style="padding-left:24px;font-size:12px"><i class="ti ti-stack-2"></i> By Set</div>
+      <div class="nav-item" id="nav-disc-pokemon" data-v="disc-pokemon" style="padding-left:24px;font-size:12px"><i class="ti ti-pokeball" style="font-size:13px"></i> By Pokémon</div>
+      <div class="nav-item" id="nav-disc-artist" data-v="disc-artist" style="padding-left:24px;font-size:12px"><i class="ti ti-brush"></i> By Artist</div>
       <div class="nav-sec" style="margin-top:6px">My Cards</div>
       <div class="nav-item" id="nav-collection" data-v="collection"><i class="ti ti-check"></i> My Collection</div>
       <div class="nav-item" id="nav-wanted" data-v="wanted"><i class="ti ti-star"></i> Wanted List</div>
@@ -437,6 +442,9 @@ const S = {
   allTags: [], // all tag names user has created
   detailCard: null,
   activeTag: null,
+  browseTagFilter: '',
+  discoverSub: null,  // set | pokemon | artist
+  discoverDetail: null, // current set/pokemon/artist name
   discover: { page: 1, total: 0, typeQ: '' },
   nb: { color: COLORS[0], layout: '3x3' },
   picker: { binderId: null, pi: null, si: null, cards: [] },
@@ -812,19 +820,139 @@ function viewAdd() {
     +'</div>';
 }
 
-async function viewDiscover(page, typeQ) {
-  const extraQ = typeQ ? 'types:'+typeQ : '';
-  const d = await fetchAny(extraQ, page, PS);
-  const cards = d.data || [];
-  const total = d.totalCount || 0;
-  S.discover = { page, total, typeQ };
-  const sortBy = document.getElementById('sortSel') ? document.getElementById('sortSel').value : 'rarity';
+// ─── DISCOVER HUB ────────────────────────────────────────────
+function viewDiscover() {
   return '<div>'
     +'<div class="page-title">Discover</div>'
-    +'<p class="page-sub">Full art cards from across every set — '+total.toLocaleString()+' total</p>'
-    +cardGrid(cards, { sortBy, binderId: null })
-    +paginationHTML(page, total, 'discover-page')
-    +'</div>';
+    +'<p class="page-sub">Browse the full Pokémon TCG card database</p>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:8px">'
+    +'<div data-a="nav" data-v="disc-set" class="disc-hub-card" style="background:#fff;border:1.5px solid var(--borderl);border-radius:14px;padding:20px;cursor:pointer;transition:all .15s">'
+    +'<div style="width:42px;height:42px;background:var(--rose100);border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:12px"><i class="ti ti-stack-2" style="font-size:20px;color:var(--rose500)"></i></div>'
+    +'<div style="font-family:var(--display);font-size:17px;font-weight:500;margin-bottom:4px">By Set</div>'
+    +'<div style="font-size:12px;color:var(--soft)">Browse every set ever released</div></div>'
+    +'<div data-a="nav" data-v="disc-pokemon" class="disc-hub-card" style="background:#fff;border:1.5px solid var(--borderl);border-radius:14px;padding:20px;cursor:pointer;transition:all .15s">'
+    +'<div style="width:42px;height:42px;background:var(--lav100);border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:12px"><i class="ti ti-cards" style="font-size:20px;color:var(--lav500)"></i></div>'
+    +'<div style="font-family:var(--display);font-size:17px;font-weight:500;margin-bottom:4px">By Pokémon</div>'
+    +'<div style="font-size:12px;color:var(--soft)">Search for a specific Pokémon</div></div>'
+    +'<div data-a="nav" data-v="disc-artist" class="disc-hub-card" style="background:#fff;border:1.5px solid var(--borderl);border-radius:14px;padding:20px;cursor:pointer;transition:all .15s">'
+    +'<div style="width:42px;height:42px;background:var(--gold100);border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:12px"><i class="ti ti-brush" style="font-size:20px;color:var(--gold500)"></i></div>'
+    +'<div style="font-family:var(--display);font-size:17px;font-weight:500;margin-bottom:4px">By Artist</div>'
+    +'<div style="font-size:12px;color:var(--soft)">Explore cards by their illustrator</div></div>'
+    +'</div></div>';
+}
+
+// ─── DISCOVER BY SET ─────────────────────────────────────────
+async function viewDiscSet(setId) {
+  if (setId) {
+    // show cards in this set
+    const d = await fetchAny('set.id:'+setId, S.discover.page||1, PS);
+    const cards = d.data || [];
+    const total = d.totalCount || 0;
+    S.discover.total = total;
+    const setName = cards.length ? cSet(cards[0]) : setId;
+    const sortBy = document.getElementById('sortSel') ? document.getElementById('sortSel').value : 'rarity';
+    return '<div>'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
+      +'<button class="btn" data-a="nav" data-v="disc-set"><i class="ti ti-arrow-left"></i> All Sets</button>'
+      +'<div class="page-title" style="margin-bottom:0">'+setName+'</div>'
+      +'</div>'
+      +'<p class="page-sub">'+total+' cards</p>'
+      +cardGrid(cards, { sortBy })
+      +paginationHTML(S.discover.page||1, total, 'disc-set-page')
+      +'</div>';
+  }
+  // show all sets
+  const d = await api('/sets', { orderBy: '-releaseDate', pageSize: 250 });
+  const sets = d.data || [];
+  // group by series
+  const groups = {};
+  sets.forEach(s => { const ser = s.series||'Other'; if(!groups[ser]) groups[ser]=[]; groups[ser].push(s); });
+  let html = '<div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<button class="btn" data-a="nav" data-v="discover"><i class="ti ti-arrow-left"></i> Discover</button>'
+    +'<div class="page-title" style="margin-bottom:0">By Set</div>'
+    +'</div>'
+    +'<p class="page-sub">'+sets.length+' sets</p>';
+  Object.entries(groups).forEach(([ser, items]) => {
+    html += '<div class="sec-title">'+ser+'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:8px">';
+    items.forEach(s => {
+      const logo = (s.images && s.images.logo) || '';
+      const total = s.printedTotal || s.total || 0;
+      html += '<div data-a="disc-set-detail" data-setid="'+s.id+'" class="disc-set-card" style="background:#fff;border:1px solid var(--borderl);border-radius:11px;padding:11px;cursor:pointer;transition:all .15s">'
+        +(logo ? '<img src="'+logo+'" style="height:30px;object-fit:contain;object-position:left;max-width:100%;margin-bottom:6px;display:block" onerror="this.style.display=&quot;none&quot;">' : '')
+        +'<div style="font-size:12px;font-weight:700;color:var(--ink);line-height:1.3;margin-bottom:2px">'+s.name+'</div>'
+        +'<div style="font-size:10px;color:var(--soft)">'+( s.releaseDate||'')+' · '+total+' cards</div>'
+        +'</div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// ─── DISCOVER BY POKÉMON ─────────────────────────────────────
+async function viewDiscPokemon(name) {
+  if (name) {
+    // show cards for this Pokémon
+    const d = await fetchAny('name:"'+name+'*"', S.discover.page||1, PS);
+    const cards = d.data || [];
+    const total = d.totalCount || 0;
+    S.discover.total = total;
+    const sortBy = document.getElementById('sortSel') ? document.getElementById('sortSel').value : 'rarity';
+    return '<div>'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
+      +'<button class="btn" data-a="nav" data-v="disc-pokemon"><i class="ti ti-arrow-left"></i> All Pokémon</button>'
+      +'<div class="page-title" style="margin-bottom:0">'+name+'</div>'
+      +'</div>'
+      +'<p class="page-sub">'+total+' card'+(total!==1?'s':'')+'</p>'
+      +cardGrid(cards, { sortBy })
+      +paginationHTML(S.discover.page||1, total, 'disc-pokemon-page')
+      +'</div>';
+  }
+  // search input for Pokémon name
+  return '<div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<button class="btn" data-a="nav" data-v="discover"><i class="ti ti-arrow-left"></i> Discover</button>'
+    +'<div class="page-title" style="margin-bottom:0">By Pokémon</div>'
+    +'</div>'
+    +'<p class="page-sub">Search for any Pokémon to see all their cards</p>'
+    +'<div style="background:#fff;border:1px solid var(--borderl);border-radius:11px;padding:14px;margin-bottom:14px">'
+    +'<div class="search-wrap"><i class="ti ti-search search-icon"></i><input type="text" id="pokemonQ" placeholder="e.g. Pikachu, Eevee, Marill..." autocomplete="off"></div>'
+    +'<div id="pokemonResults" style="margin-top:10px"></div>'
+    +'</div></div>';
+}
+
+// ─── DISCOVER BY ARTIST ──────────────────────────────────────
+async function viewDiscArtist(artist) {
+  if (artist) {
+    // show cards by this artist
+    const d = await fetchAny('artist:"'+artist+'"', S.discover.page||1, PS);
+    const cards = d.data || [];
+    const total = d.totalCount || 0;
+    S.discover.total = total;
+    const sortBy = document.getElementById('sortSel') ? document.getElementById('sortSel').value : 'rarity';
+    return '<div>'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
+      +'<button class="btn" data-a="nav" data-v="disc-artist"><i class="ti ti-arrow-left"></i> All Artists</button>'
+      +'<div class="page-title" style="margin-bottom:0">'+artist+'</div>'
+      +'</div>'
+      +'<p class="page-sub">'+total+' card'+(total!==1?'s':'')+' by this artist</p>'
+      +cardGrid(cards, { sortBy })
+      +paginationHTML(S.discover.page||1, total, 'disc-artist-page')
+      +'</div>';
+  }
+  // fetch a sample to get artist names, and show a searchable list
+  return '<div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<button class="btn" data-a="nav" data-v="discover"><i class="ti ti-arrow-left"></i> Discover</button>'
+    +'<div class="page-title" style="margin-bottom:0">By Artist</div>'
+    +'</div>'
+    +'<p class="page-sub">Search for an illustrator to see all their cards</p>'
+    +'<div style="background:#fff;border:1px solid var(--borderl);border-radius:11px;padding:14px;margin-bottom:14px">'
+    +'<div class="search-wrap"><i class="ti ti-search search-icon"></i><input type="text" id="artistQ" placeholder="e.g. Mitsuhiro Arita, Naoki Saito..." autocomplete="off"></div>'
+    +'<div id="artistResults" style="margin-top:10px"></div>'
+    +'</div></div>';
 }
 
 async function viewCollection(which) {
@@ -876,24 +1004,52 @@ async function viewBinder(binderId, tab) {
     return hdr+tabs+pgs;
 
   } else if (tab==='browse') {
-    // Build smart type query from what's already in binder
-    const allIds = [...new Set(b.pages.flat().filter(Boolean))];
-    let extraQ = '';
-    if (allIds.length) {
-      const seeds = await fetchByIds(allIds);
-      const allTypes = seeds.flatMap(c => cType(c));
-      if (allTypes.length) {
-        const topType = Object.entries(allTypes.reduce((m,t)=>{m[t]=(m[t]||0)+1;return m;},{}))
-          .sort((a,b)=>b[1]-a[1])[0];
-        if (topType) extraQ = 'types:'+topType[0];
-      }
-    }
-    const d = await fetchFullArt(extraQ, 1, 40);
-    const cards = d.data || [];
     const sortBy = document.getElementById('sortSel') ? document.getElementById('sortSel').value : 'rarity';
-    return hdr+tabs
-      +'<p style="font-size:12px;color:var(--soft);margin-bottom:10px">Full art cards. Click any card to add to the next open slot.</p>'
-      +cardGrid(cards, { sortBy, binderId });
+    // Tag filter UI
+    const userTags = [...new Set([...S.allTags, ...PRESET_TAGS])].sort();
+    const activeTagFilter = S.browseTagFilter || '';
+    const tagFilterHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">'
+      +'<span style="font-size:12px;font-weight:700;color:var(--soft);white-space:nowrap">Filter by tag:</span>'
+      +'<select id="browseTagSel" class="fi" style="flex:1;max-width:240px;padding:6px 10px;font-size:12px">'
+      +'<option value="">All full art cards</option>'
+      +(S.allTags.length ? '<optgroup label="My Tags">'+S.allTags.map(t=>{
+          const count=Object.values(S.tags).filter(ts=>ts.includes(t)).length;
+          return '<option value="TAG:'+t+'"'+(activeTagFilter==='TAG:'+t?' selected':'')+'>'+t+' ('+count+' card'+(count!==1?'s':'')+')</option>';
+        }).join('')+'</optgroup>' : '')
+      +'<optgroup label="All Tag Ideas">'+PRESET_TAGS.map(t=>'<option value="TAG:'+t+'"'+(activeTagFilter==='TAG:'+t?' selected':'')+'>'+t+'</option>').join('')+'</optgroup>'
+      +'</select>'
+      +(activeTagFilter ? '<button class="btn" data-a="clear-tag-filter" style="padding:5px 10px;font-size:11px"><i class="ti ti-x"></i> Clear</button>' : '')
+      +'</div>';
+
+    let cards = [];
+    let subNote = '';
+    if (activeTagFilter && activeTagFilter.startsWith('TAG:')) {
+      const tag = activeTagFilter.slice(4);
+      const taggedIds = Object.entries(S.tags).filter(([,ts])=>ts.includes(tag)).map(([id])=>id);
+      if (taggedIds.length) {
+        cards = await fetchByIds(taggedIds);
+        subNote = '<p style="font-size:12px;color:var(--soft);margin-bottom:10px">'+cards.length+' card'+(cards.length!==1?'s':'')+' tagged "'+tag+'". Click any to add to next open slot.</p>';
+      } else {
+        subNote = '<p style="font-size:12px;color:var(--rose600);margin-bottom:10px;background:var(--rose100);padding:8px 12px;border-radius:8px">No cards tagged "'+tag+'" yet. Tag cards from their detail panel.</p>';
+      }
+    } else {
+      const allIds = [...new Set(b.pages.flat().filter(Boolean))];
+      let extraQ = '';
+      if (allIds.length) {
+        const seeds = await fetchByIds(allIds);
+        const allTypes = seeds.flatMap(c => cType(c));
+        if (allTypes.length) {
+          const topType = Object.entries(allTypes.reduce((m,t)=>{m[t]=(m[t]||0)+1;return m;},{}))
+            .sort((a,b)=>b[1]-a[1])[0];
+          if (topType) extraQ = 'types:'+topType[0];
+        }
+      }
+      const d = await fetchFullArt(extraQ, 1, 40);
+      cards = d.data || [];
+      subNote = '<p style="font-size:12px;color:var(--soft);margin-bottom:10px">Full art cards. Click any to add to the next open slot.</p>';
+    }
+
+    return hdr+tabs+tagFilterHTML+subNote+cardGrid(cards, { sortBy, binderId });
 
   } else { // suggest
     const allIds = [...new Set(b.pages.flat().filter(Boolean))];
@@ -968,14 +1124,25 @@ function binderTabs(id, active) {
 // ─── NAV ─────────────────────────────────────────────────────
 function nav(v) {
   S.view = v; S.activeBinder = null;
+  // reset discover detail when navigating to a discover section
+  if (['discover','disc-set','disc-pokemon','disc-artist'].includes(v)) {
+    S.discoverDetail = null;
+    S.discover.page = 1;
+  }
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   const el = document.getElementById('nav-'+v);
   if (el) el.classList.add('active');
+  // highlight parent discover if on sub-page
+  if (['disc-set','disc-pokemon','disc-artist'].includes(v)) {
+    const d = document.getElementById('nav-discover');
+    if (d) d.classList.add('active');
+  }
   document.querySelectorAll('.binder-li').forEach(el => el.classList.remove('active'));
   render();
 }
 function navBinder(id, tab) {
   S.view = 'binder'; S.activeBinder = id; S.binderTab = tab||'layout';
+  if (tab !== 'browse') S.browseTagFilter = '';
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.binder-li').forEach(el => el.classList.remove('active'));
   const bi = document.querySelector('.binder-li[data-id="'+id+'"]');
@@ -992,7 +1159,10 @@ async function render() {
     let html = '';
     if      (S.view==='home')       html = viewDashboard();
     else if (S.view==='add')        html = viewAdd();
-    else if (S.view==='discover')   html = await viewDiscover(S.discover.page||1, S.discover.typeQ||'');
+    else if (S.view==='discover')    html = viewDiscover();
+    else if (S.view==='disc-set')    html = await viewDiscSet(S.discoverDetail);
+    else if (S.view==='disc-pokemon')html = await viewDiscPokemon(S.discoverDetail);
+    else if (S.view==='disc-artist') html = await viewDiscArtist(S.discoverDetail);
     else if (S.view==='collection') html = await viewCollection('collection');
     else if (S.view==='wanted')     html = await viewCollection('wanted');
     else if (S.view==='binder')     html = await viewBinder(S.activeBinder, S.binderTab);
@@ -1013,6 +1183,97 @@ function attachListeners() {
   const el = document.getElementById('main');
   if (!el) return;
   el.addEventListener('click', onContentClick);
+
+  // Pokémon search
+  const pokemonQ = document.getElementById('pokemonQ');
+  if (pokemonQ) {
+    pokemonQ.focus();
+    let pt;
+    pokemonQ.addEventListener('input', () => {
+      clearTimeout(pt);
+      const v = pokemonQ.value.trim();
+      const res = document.getElementById('pokemonResults');
+      if (!v) { if(res) res.innerHTML=''; return; }
+      if (res) res.innerHTML = '<div style="color:var(--soft);font-size:12px;padding:6px 0">Searching...</div>';
+      pt = setTimeout(async () => {
+        try {
+          // get distinct Pokémon names matching query
+          const d = await api('/cards', { q: 'name:"'+v+'*"', pageSize: 20, orderBy: 'name' });
+          const cards = d.data || [];
+          const res2 = document.getElementById('pokemonResults');
+          if (!res2) return;
+          if (!cards.length) { res2.innerHTML = '<div style="font-size:12px;color:var(--soft);padding:8px 10px;background:var(--cream2);border-radius:8px">No Pokémon found</div>'; return; }
+          // dedupe by base name
+          const seen = new Set();
+          const names = [];
+          cards.forEach(c => {
+            const base = (c.name||'').replace(/\s+(V|VMAX|VSTAR|GX|EX|ex|BREAK|Radiant|Shining|Prism Star)$/i,'').trim();
+            if (!seen.has(base)) { seen.add(base); names.push({ base, full: c.name }); }
+          });
+          res2.innerHTML = '<div style="display:flex;flex-direction:column;gap:5px">'
+            + names.map(n =>
+                '<div class="sri" data-a="disc-pokemon-detail" data-name="'+n.base+'" style="cursor:pointer">'
+                +'<i class="ti ti-cards" style="font-size:18px;color:var(--lav300);flex-shrink:0"></i>'
+                +'<div style="flex:1"><div style="font-size:13px;font-weight:700">'+n.base+'</div></div>'
+                +'<i class="ti ti-chevron-right" style="color:var(--soft)"></i>'
+                +'</div>'
+              ).join('')
+            +'</div>';
+        } catch(e2) {
+          const r2 = document.getElementById('pokemonResults');
+          if (r2) r2.innerHTML = '<div style="font-size:12px;color:var(--rose600);padding:8px 10px;background:var(--rose100);border-radius:8px">Search failed</div>';
+        }
+      }, 400);
+    });
+  }
+
+  // Artist search
+  const artistQ = document.getElementById('artistQ');
+  if (artistQ) {
+    artistQ.focus();
+    let at;
+    artistQ.addEventListener('input', () => {
+      clearTimeout(at);
+      const v = artistQ.value.trim();
+      const res = document.getElementById('artistResults');
+      if (!v) { if(res) res.innerHTML=''; return; }
+      if (res) res.innerHTML = '<div style="color:var(--soft);font-size:12px;padding:6px 0">Searching...</div>';
+      at = setTimeout(async () => {
+        try {
+          const d = await api('/cards', { q: 'artist:"'+v+'*"', pageSize: 20, orderBy: 'name' });
+          const cards = d.data || [];
+          const res2 = document.getElementById('artistResults');
+          if (!res2) return;
+          if (!cards.length) { res2.innerHTML = '<div style="font-size:12px;color:var(--soft);padding:8px 10px;background:var(--cream2);border-radius:8px">No artists found</div>'; return; }
+          // dedupe artist names
+          const seen = new Set();
+          const artists = [];
+          cards.forEach(c => { const a = cArt(c); if (a && !seen.has(a)) { seen.add(a); artists.push(a); } });
+          res2.innerHTML = '<div style="display:flex;flex-direction:column;gap:5px">'
+            + artists.map(a =>
+                '<div class="sri" data-a="disc-artist-detail" data-name="'+a+'" style="cursor:pointer">'
+                +'<i class="ti ti-brush" style="font-size:18px;color:var(--gold300);flex-shrink:0"></i>'
+                +'<div style="flex:1"><div style="font-size:13px;font-weight:700">'+a+'</div></div>'
+                +'<i class="ti ti-chevron-right" style="color:var(--soft)"></i>'
+                +'</div>'
+              ).join('')
+            +'</div>';
+        } catch(e2) {
+          const r2 = document.getElementById('artistResults');
+          if (r2) r2.innerHTML = '<div style="font-size:12px;color:var(--rose600);padding:8px 10px;background:var(--rose100);border-radius:8px">Search failed</div>';
+        }
+      }, 400);
+    });
+  }
+
+  // binder browse tag filter
+  const browseTagSel = document.getElementById('browseTagSel');
+  if (browseTagSel) {
+    browseTagSel.addEventListener('change', () => {
+      S.browseTagFilter = browseTagSel.value;
+      render();
+    });
+  }
 
   // add search
   const addQ = document.getElementById('addQ');
@@ -1092,9 +1353,15 @@ function onContentClick(e) {
   else if (a==='add-page')     { addPage(el.dataset.id); }
   else if (a==='del-binder')   { delBinder(el.dataset.id); }
   else if (a==='nav')          { nav(el.dataset.v); }
-  else if (a==='discover-page'){ const p=+el.dataset.p; if(p>=1){S.discover.page=p;render();} }
   else if (a==='tag-binder')  { createBinderFromTag(el.dataset.tag); }
   else if (a==='tag-view')    { S.view='tag-cards'; S.activeTag=el.dataset.tag; render(); }
+  else if (a==='clear-tag-filter')    { S.browseTagFilter=''; render(); }
+  else if (a==='disc-set-detail')     { S.view='disc-set'; S.discoverDetail=el.dataset.setid; S.discover.page=1; render(); }
+  else if (a==='disc-pokemon-detail') { S.view='disc-pokemon'; S.discoverDetail=el.dataset.name; S.discover.page=1; render(); }
+  else if (a==='disc-artist-detail')  { S.view='disc-artist'; S.discoverDetail=el.dataset.name; S.discover.page=1; render(); }
+  else if (a==='disc-set-page')       { const p=+el.dataset.p; if(p>=1){S.discover.page=p;render();} }
+  else if (a==='disc-pokemon-page')   { const p=+el.dataset.p; if(p>=1){S.discover.page=p;render();} }
+  else if (a==='disc-artist-page')    { const p=+el.dataset.p; if(p>=1){S.discover.page=p;render();} }
   else if (a==='retry')       { render(); }
 }
 
@@ -1351,13 +1618,29 @@ function openNewBinder() {
   lp.querySelectorAll('.lopt').forEach(el=>el.addEventListener('click',()=>{
     S.nb.layout=el.dataset.lid; lp.querySelectorAll('.lopt').forEach(o=>o.classList.remove('on')); el.classList.add('on');
   }));
-  // populate tag select
+  // populate tag select — show user's tags first (with counts), then all presets
   const tagSel = document.getElementById('bTag');
-  tagSel.innerHTML = '<option value="">No tag — start empty</option>'
-    + S.allTags.map(t => {
-        const count = Object.values(S.tags).filter(ts => ts.includes(t)).length;
-        return '<option value="'+t+'">'+t+' ('+count+' card'+(count!==1?'s':'')+')</option>';
-      }).join('');
+  const userTagSet = new Set(S.allTags);
+  const allTagOptions = [...new Set([...S.allTags, ...PRESET_TAGS])].sort();
+  tagSel.innerHTML = '<option value="">No tag — start empty</option>';
+  // group: user tags with cards first
+  if (S.allTags.length) {
+    const og1 = document.createElement('optgroup'); og1.label = 'My Tags';
+    S.allTags.forEach(t => {
+      const count = Object.values(S.tags).filter(ts => ts.includes(t)).length;
+      const o = document.createElement('option'); o.value=t;
+      o.textContent = t + ' (' + count + ' card' + (count!==1?'s':'') + ')';
+      og1.appendChild(o);
+    });
+    tagSel.appendChild(og1);
+  }
+  // all preset tags (excluding ones already shown above)
+  const og2 = document.createElement('optgroup'); og2.label = 'All Tag Ideas';
+  PRESET_TAGS.forEach(t => {
+    const o = document.createElement('option'); o.value=t; o.textContent=t;
+    og2.appendChild(o);
+  });
+  tagSel.appendChild(og2);
   tagSel.value = '';
   document.getElementById('bTagPreview').style.display = 'none';
   tagSel.onchange = () => {
