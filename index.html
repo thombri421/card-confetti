@@ -369,6 +369,14 @@ const APIKEY = 'e5e82060-99d6-4b86-88e6-42a869a7625d';
 const HDR    = {'X-Api-Key': APIKEY};
 const PS     = 20;
 
+const RARITY_ORDER = {
+  'Special Illustration Rare':1,'Illustration Rare':2,'Hyper Rare':3,
+  'Rare Rainbow':4,'Rare Secret':5,'Ultra Rare':6,'Double Rare':7,
+  'ACE SPEC Rare':8,'Radiant Rare':9,'Rare Holo GX':10,'Rare Holo EX':11,
+  'Rare Holo Star':12,'Rare Ultra':13,'Rare Shiny GX':14,'Rare Shiny':15,
+  'Rare BREAK':16,'Rare Holo':17,'Rare':18,'Uncommon':19,'Common':20,
+};
+
 const FULL_ART_Q = [
   'Illustration Rare','Special Illustration Rare','Hyper Rare',
   'Double Rare','ACE SPEC Rare','Ultra Rare','Rare Rainbow',
@@ -381,6 +389,10 @@ const PRESET_TAGS = [
   // Types
   'Fire','Water','Grass','Electric','Psychic','Dark','Ghost','Fairy','Dragon','Steel',
   'Fighting','Normal','Poison','Ground','Flying','Bug','Rock','Ice',
+  // Colors
+  'Red','Crimson','Pink','Rose','Coral','Orange','Amber','Gold','Yellow',
+  'Lime Green','Green','Teal','Cyan','Sky Blue','Blue','Indigo','Purple',
+  'Violet','Lavender','Magenta','White','Silver','Grey','Black','Brown',
   // Aesthetic vibes
   'Girly','Cottagecore','Galaxy','Pastel','Vintage','Holographic','Gothic','Kawaii','Neon',
   'Rainbow','Gold','Full Art','Illustration','Favourite','Shiny',
@@ -447,6 +459,7 @@ const S = {
   browseTagFilter: '',
   addSearchPage: 1,
   addSearchQuery: '',
+  collectionSort: 'rarity',
   discoverSub: null,  // set | pokemon | artist
   discoverDetail: null, // current set/pokemon/artist name
   discover: { page: 1, total: 0, typeQ: '' },
@@ -1030,6 +1043,34 @@ async function viewDiscArtist(artist) {
     +'</div></div>';
 }
 
+function sortCollection(cards, sortBy) {
+  const sorted = [...cards];
+  if (sortBy === 'name') {
+    sorted.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  } else if (sortBy === 'rarity') {
+    sorted.sort((a,b) => {
+      const ra = RARITY_ORDER[cRar(a)] || 99;
+      const rb = RARITY_ORDER[cRar(b)] || 99;
+      return ra - rb;
+    });
+  } else if (sortBy === 'age-new') {
+    // newest set first — sort by set releaseDate desc
+    sorted.sort((a,b) => {
+      const da = (a.set && a.set.releaseDate) || '';
+      const db = (b.set && b.set.releaseDate) || '';
+      return db.localeCompare(da);
+    });
+  } else if (sortBy === 'age-old') {
+    // oldest set first
+    sorted.sort((a,b) => {
+      const da = (a.set && a.set.releaseDate) || '';
+      const db = (b.set && b.set.releaseDate) || '';
+      return da.localeCompare(db);
+    });
+  }
+  return sorted;
+}
+
 async function viewCollection(which) {
   const ids = Object.keys(which==='collection' ? S.collection : S.wanted);
   const title = which==='collection' ? 'My Collection' : 'Wanted List';
@@ -1037,10 +1078,25 @@ async function viewCollection(which) {
   if (!ids.length) return '<div class="page-title">'+title+'</div>'
     +'<div class="empty-state"><i class="ti '+icon+'"></i><p>Nothing here yet</p></div>';
   const cards = await fetchByIds(ids);
-  const sortBy = document.getElementById('sortSel') ? document.getElementById('sortSel').value : 'rarity';
+  const sort = S.collectionSort || 'rarity';
+  const sorted = sortCollection(cards, sort);
+
+  const sortBar = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<span style="font-size:12px;font-weight:700;color:var(--soft)">Sort:</span>'
+    +[
+      ['rarity',  'Best Rarity'],
+      ['name',    'A – Z'],
+      ['age-new', 'Newest First'],
+      ['age-old', 'Oldest First'],
+    ].map(([val, lbl]) =>
+      '<button class="btn'+(sort===val?' primary':'')+'" data-a="coll-sort" data-sort="'+val+'" style="padding:5px 12px;font-size:11px">'+lbl+'</button>'
+    ).join('')
+    +'</div>';
+
   return '<div class="page-title">'+title+'</div>'
     +'<p class="page-sub">'+ids.length+' cards</p>'
-    +cardGrid(cards, { sortBy });
+    +sortBar
+    +cardGrid(sorted, {});
 }
 
 async function viewBinder(binderId, tab) {
@@ -1538,6 +1594,7 @@ function onContentClick(e) {
   else if (a==='tag-binder')  { createBinderFromTag(el.dataset.tag); }
   else if (a==='tag-view')    { S.view='tag-cards'; S.activeTag=el.dataset.tag; render(); }
   else if (a==='clear-tag-filter')    { S.browseTagFilter=''; render(); }
+  else if (a==='coll-sort')           { S.collectionSort=el.dataset.sort; render(); }
   else if (a==='disc-set-detail')     { S.view='disc-set'; S.discoverDetail=el.dataset.setid; S.discover.page=1; render(); }
   else if (a==='disc-pokemon-detail') { S.view='disc-pokemon'; S.discoverDetail=el.dataset.name; S.discover.page=1; render(); }
   else if (a==='disc-artist-detail')  { S.view='disc-artist'; S.discoverDetail=el.dataset.name; S.discover.page=1; render(); }
