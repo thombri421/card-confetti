@@ -445,6 +445,8 @@ const S = {
   detailCard: null,
   activeTag: null,
   browseTagFilter: '',
+  addSearchPage: 1,
+  addSearchQuery: '',
   discoverSub: null,  // set | pokemon | artist
   discoverDetail: null, // current set/pokemon/artist name
   discover: { page: 1, total: 0, typeQ: '' },
@@ -608,7 +610,8 @@ async function fetchByIds(ids) {
   return results.flat();
 }
 
-async function searchFullArt(query) {
+async function searchCards(query, page) {
+  page = page || 1;
   const parts = query.trim().split(/\s+/);
   const last  = parts[parts.length-1];
   let nameQ;
@@ -617,18 +620,24 @@ async function searchFullArt(query) {
   } else {
     nameQ = 'name:"'+query.trim()+'*"';
   }
-  // orderBy name is faster than rarity for search
-  const d = await api('/cards', { q: nameQ, pageSize: 24, orderBy: 'name' });
+  const d = await api('/cards', { q: nameQ, page: page, pageSize: 24, orderBy: 'name' });
   const cards = d.data || [];
+  const total = d.totalCount || 0;
   const ql = (parts.length>1 && /^\d+$/.test(last) ? parts.slice(0,-1).join(' ') : query.trim()).toLowerCase();
-  return cards.sort((a,b) => {
+  const sorted = page === 1 ? cards.sort((a,b) => {
     const an=(a.name||'').toLowerCase(), bn=(b.name||'').toLowerCase();
     if(an===ql && bn!==ql) return -1;
     if(bn===ql && an!==ql) return 1;
     if(an.startsWith(ql) && !bn.startsWith(ql)) return -1;
     if(bn.startsWith(ql) && !an.startsWith(ql)) return 1;
     return 0;
-  });
+  }) : cards;
+  return { cards: sorted, total };
+}
+// keep old name as alias
+async function searchFullArt(query) {
+  const r = await searchCards(query, 1);
+  return r.cards;
 }
 
 // ─── SUGGESTION ENGINE ───────────────────────────────────────
@@ -1354,14 +1363,17 @@ function attachListeners() {
       if (!v) return;
       t = setTimeout(async () => {
         try {
-          const cards = await searchFullArt(v);
+          S.addSearchQuery = v;
+          S.addSearchPage = 1;
+          const { cards, total } = await searchCards(v, 1);
           const res2 = document.getElementById('addResults');
           if (!res2) return;
           if (!cards.length) {
-            res2.innerHTML = '<div style="font-size:12px;color:var(--soft);padding:8px 10px;background:var(--cream2);border-radius:8px;margin-top:8px">No full art cards found for that search.</div>';
+            res2.innerHTML = '<div style="font-size:12px;color:var(--soft);padding:8px 10px;background:var(--cream2);border-radius:8px;margin-top:8px">No cards found for that search.</div>';
             return;
           }
-          res2.innerHTML = '<div style="font-size:11px;color:var(--soft);margin:8px 0 6px">'+cards.length+' result'+(cards.length!==1?'s':'')+' for "'+v+'"</div>'
+          const remaining = total - 24;
+          res2.innerHTML = '<div style="font-size:11px;color:var(--soft);margin:8px 0 6px">'+total+' result'+(total!==1?'s':'')+' for "'+v+'" — showing first '+Math.min(24,total)+'</div>'
             +'<div style="display:flex;flex-direction:column;gap:8px;max-height:480px;overflow-y:auto" id="addCardList">'
             +cards.map(c => {
               const owned = S.collection[c.id];
@@ -1391,7 +1403,66 @@ function attachListeners() {
                 + tagHTML
                 +'</div>';
             }).join('')+'</div>'
-            +'<datalist id="inlineTagList">'+[...new Set([...S.allTags,...PRESET_TAGS])].sort().map(t=>'<option value="'+t+'">').join('')+'</datalist>';
+            +'<datalist id="inlineTagList">'+[...new Set([...S.allTags,...PRESET_TAGS])].sort().map(t=>'<option value="'+t+'">').join('')+'</datalist>'
+            +(remaining > 0 ? '<button class="btn" id="showMoreCards" style="width:100%;justify-content:center;margin-top:10px"><i class="ti ti-chevron-down"></i> Show more ('+remaining+' remaining)</button>' : '');
+          // show more button
+          const showMore = document.getElementById('showMoreCards');
+          if (showMore) {
+            showMore.addEventListener('click', async () => {
+              showMore.innerHTML = '<i class="ti ti-loader" style="animation:spin .7s linear infinite"></i> Loading...';
+              showMore.disabled = true;
+              try {
+                S.addSearchPage++;
+                const { cards: moreCards, total: moreTotal } = await searchCards(S.addSearchQuery, S.addSearchPage);
+                const list = document.getElementById('addCardList');
+                if (list && moreCards.length) {
+                  // append new cards
+                  const frag = document.createElement('div');
+                  frag.innerHTML = moreCards.map(c => {
+                    const owned = S.collection[c.id];
+                    const img = cImg(c);
+                    const cardTags = S.tags[c.id] || [];
+                    const tagHTML = '<div class="inline-tags" data-card-id="'+c.id+'" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;align-items:center">'
+                      + cardTags.map(t2 => '<span style="background:var(--lav100);border:1px solid var(--lav300);color:var(--lav500);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:3px">'+t2+'<button class="inline-tag-rm" data-card-id="'+c.id+'" data-tag="'+t2+'" style="background:none;border:none;color:var(--lav500);cursor:pointer;font-size:10px;padding:0;line-height:1;margin-left:1px">×</button></span>').join('')
+                      + (cardTags.length < 5 ? '<input class="inline-tag-input itag-inp-focus" data-card-id="'+c.id+'" type="text" placeholder="+ tag" list="inlineTagList" style="border:1px dashed var(--borderl);border-radius:20px;padding:2px 8px;font-size:10px;font-family:var(--font);outline:none;background:none;color:var(--soft);width:70px;cursor:pointer">' : '')
+                      + '</div>';
+                    return '<div class="sri" style="flex-direction:column;align-items:flex-start;gap:6px">'
+                      +'<div style="display:flex;align-items:center;gap:9px;width:100%">'
+                      +(img ? '<img class="sri-img" src="'+img+'" alt="'+c.name+'" loading="lazy">' : '<div class="sri-img" style="display:flex;align-items:center;justify-content:center"><i class="ti ti-photo" style="color:var(--soft)"></i></div>')
+                      +'<div class="sri-info"><div style="font-size:13px;font-weight:700">'+c.name+'</div>'
+                      +'<div style="font-size:11px;color:var(--rose500);font-weight:700;margin-top:1px">'+cNum(c)+' · '+cSet(c)+'</div>'
+                      +'<div style="font-size:10px;color:var(--soft);margin-top:1px">'+cRar(c)+'</div></div>'
+                      +'<div style="flex-shrink:0;margin-left:auto">'
+                      +(owned ? '<button class="btn owned-btn add-toggle" data-id="'+c.id+'" style="padding:5px 10px;font-size:11px">✓ Owned</button>'
+                               : '<button class="btn primary add-toggle" data-id="'+c.id+'" style="padding:5px 10px;font-size:11px">+ Add</button>')
+                      +'</div></div>'+tagHTML+'</div>';
+                  }).join('');
+                  // attach listeners on new items
+                  frag.querySelectorAll('.add-toggle').forEach(btn => {
+                    btn.addEventListener('click', e2 => {
+                      e2.stopPropagation();
+                      const id = btn.dataset.id;
+                      if (S.collection[id]) { delete S.collection[id]; save(); renderBinderNav(); btn.className='btn primary add-toggle'; btn.style.cssText='padding:5px 10px;font-size:11px'; btn.textContent='+ Add'; }
+                      else { S.collection[id]=true; delete S.wanted[id]; save(); renderBinderNav(); btn.className='btn owned-btn add-toggle'; btn.style.cssText='padding:5px 10px;font-size:11px'; btn.textContent='✓ Owned'; }
+                    });
+                  });
+                  frag.querySelectorAll('.inline-tag-input').forEach(input => {
+                    input.addEventListener('keydown', e2 => { if(e2.key==='Enter'){e2.preventDefault();const val=input.value.trim();if(val&&addTagToCard(input.dataset.cardId,val)){input.value='';refreshInlineTags(input.dataset.cardId,res2);}} });
+                    input.addEventListener('blur', () => { const val=input.value.trim();if(val&&addTagToCard(input.dataset.cardId,val)){input.value='';refreshInlineTags(input.dataset.cardId,res2);} });
+                  });
+                  frag.querySelectorAll('.inline-tag-rm').forEach(btn => {
+                    btn.addEventListener('click', e2 => { e2.stopPropagation(); removeTagFromCard(btn.dataset.cardId,btn.dataset.tag); refreshInlineTags(btn.dataset.cardId,res2); });
+                  });
+                  while(frag.firstChild) list.appendChild(frag.firstChild);
+                }
+                const loaded = S.addSearchPage * 24;
+                const rem2 = moreTotal - loaded;
+                if (rem2 > 0) { showMore.innerHTML='<i class="ti ti-chevron-down"></i> Show more ('+rem2+' remaining)'; showMore.disabled=false; }
+                else { showMore.remove(); }
+              } catch(e2) { showMore.innerHTML='Failed — try again'; showMore.disabled=false; }
+            });
+          }
+
           // attach inline tag inputs
           res2.querySelectorAll('.inline-tag-input').forEach(input => {
             input.addEventListener('keydown', e => {
