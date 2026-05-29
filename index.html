@@ -820,6 +820,17 @@ function viewAdd() {
     +'</div>';
 }
 
+// ─── SHARED ERROR VIEW ───────────────────────────────────────
+function errorView(msg, backView) {
+  return '<div class="empty-state">'
+    +'<i class="ti ti-wifi-off"></i>'
+    +'<p>'+msg+'</p>'
+    +'<div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">'
+    +'<button class="btn primary" data-a="retry"><i class="ti ti-refresh"></i> Retry</button>'
+    +(backView ? '<button class="btn" data-a="nav" data-v="'+backView+'"><i class="ti ti-arrow-left"></i> Go Back</button>' : '')
+    +'</div></div>';
+}
+
 // ─── DISCOVER HUB ────────────────────────────────────────────
 function viewDiscover() {
   return '<div>'
@@ -844,26 +855,34 @@ function viewDiscover() {
 // ─── DISCOVER BY SET ─────────────────────────────────────────
 async function viewDiscSet(setId) {
   if (setId) {
-    // show cards in this set
-    const d = await fetchAny('set.id:'+setId, S.discover.page||1, PS);
-    const cards = d.data || [];
-    const total = d.totalCount || 0;
-    S.discover.total = total;
-    const setName = cards.length ? cSet(cards[0]) : setId;
-    const sortBy = document.getElementById('sortSel') ? document.getElementById('sortSel').value : 'rarity';
-    return '<div>'
-      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
-      +'<button class="btn" data-a="nav" data-v="disc-set"><i class="ti ti-arrow-left"></i> All Sets</button>'
-      +'<div class="page-title" style="margin-bottom:0">'+setName+'</div>'
-      +'</div>'
-      +'<p class="page-sub">'+total+' cards</p>'
-      +cardGrid(cards, { sortBy })
-      +paginationHTML(S.discover.page||1, total, 'disc-set-page')
-      +'</div>';
+    try {
+      const d = await fetchAny('set.id:'+setId, S.discover.page||1, PS);
+      const cards = d.data || [];
+      const total = d.totalCount || 0;
+      S.discover.total = total;
+      const setName = cards.length ? cSet(cards[0]) : setId;
+      const sortBy = document.getElementById('sortSel') ? document.getElementById('sortSel').value : 'rarity';
+      return '<div>'
+        +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
+        +'<button class="btn" data-a="nav" data-v="disc-set"><i class="ti ti-arrow-left"></i> All Sets</button>'
+        +'<div class="page-title" style="margin-bottom:0">'+setName+'</div>'
+        +'</div>'
+        +'<p class="page-sub">'+total+' cards</p>'
+        +cardGrid(cards, { sortBy })
+        +paginationHTML(S.discover.page||1, total, 'disc-set-page')
+        +'</div>';
+    } catch(e) {
+      return errorView('Could not load set cards.', 'disc-set');
+    }
   }
-  // show all sets
-  const d = await api('/sets', { orderBy: '-releaseDate', pageSize: 250 });
-  const sets = d.data || [];
+  // show all sets — use cached result if available
+  let sets = [];
+  try {
+    const d = await api('/sets', { orderBy: '-releaseDate', pageSize: 250 });
+    sets = d.data || [];
+  } catch(e) {
+    return errorView('Could not load sets. Please check your connection.', 'discover');
+  }
   // group by series
   const groups = {};
   sets.forEach(s => { const ser = s.series||'Other'; if(!groups[ser]) groups[ser]=[]; groups[ser].push(s); });
@@ -895,9 +914,11 @@ async function viewDiscSet(setId) {
 async function viewDiscPokemon(name) {
   if (name) {
     // show cards for this Pokémon
-    const d = await fetchAny('name:"'+name+'*"', S.discover.page||1, PS);
-    const cards = d.data || [];
-    const total = d.totalCount || 0;
+    let cards = [], total = 0;
+    try {
+      const d = await fetchAny('name:"'+name+'*"', S.discover.page||1, PS);
+      cards = d.data || []; total = d.totalCount || 0;
+    } catch(e) { return errorView('Could not load Pokémon cards.', 'disc-pokemon'); }
     S.discover.total = total;
     const sortBy = document.getElementById('sortSel') ? document.getElementById('sortSel').value : 'rarity';
     return '<div>'
@@ -926,10 +947,11 @@ async function viewDiscPokemon(name) {
 // ─── DISCOVER BY ARTIST ──────────────────────────────────────
 async function viewDiscArtist(artist) {
   if (artist) {
-    // show cards by this artist
-    const d = await fetchAny('artist:"'+artist+'"', S.discover.page||1, PS);
-    const cards = d.data || [];
-    const total = d.totalCount || 0;
+    let cards = [], total = 0;
+    try {
+      const d = await fetchAny('artist:"'+artist+'"', S.discover.page||1, PS);
+      cards = d.data || []; total = d.totalCount || 0;
+    } catch(e) { return errorView('Could not load artist cards.', 'disc-artist'); }
     S.discover.total = total;
     const sortBy = document.getElementById('sortSel') ? document.getElementById('sortSel').value : 'rarity';
     return '<div>'
