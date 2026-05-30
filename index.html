@@ -313,12 +313,15 @@ select{padding:7px 10px;background:#fff;border:1px solid var(--borderl);border-r
       <div class="chips-wrap" style="margin-top:14px;border-top:1px solid var(--borderl);padding-top:12px">
         <div class="chips-title">My Tags <span id="dTagCount" style="font-weight:400;color:var(--soft);font-size:10px"></span></div>
         <div id="dTags"></div>
-        <div id="dTagInput" style="margin-top:8px;display:flex;gap:6px;align-items:center">
-          <div style="position:relative;flex:1">
-            <input type="text" id="dTagQ" class="fi" placeholder="Add a tag..." style="padding:6px 10px;font-size:12px" list="dTagSuggestions">
-            <datalist id="dTagSuggestions"></datalist>
+        <div id="dTagInput" style="margin-top:8px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="position:relative;flex:1">
+              <input type="text" id="dTagQ" class="fi" placeholder="Type anything — or pick a suggestion" style="padding:6px 10px;font-size:12px" list="dTagSuggestions">
+              <datalist id="dTagSuggestions"></datalist>
+            </div>
+            <button class="btn primary" id="dTagAdd" style="padding:6px 11px;font-size:11px">Add</button>
           </div>
-          <button class="btn primary" id="dTagAdd" style="padding:6px 11px;font-size:11px">Add</button>
+          <div style="font-size:10px;color:var(--soft);line-height:1.5">✦ Create your own tag by typing anything and pressing Enter. Up to 5 tags per card.</div>
         </div>
       </div>
     </div>
@@ -355,8 +358,9 @@ select{padding:7px 10px;background:#fff;border:1px solid var(--borderl);border-r
       <div class="picker-title">Pick a Card</div>
       <button class="picker-close" id="pickerClose">×</button>
     </div>
+    <div id="pickerSourceTabs"></div>
     <div class="picker-search">
-      <div class="search-wrap"><i class="ti ti-search search-icon"></i><input type="text" id="pickerQ" placeholder="Search your collection..."></div>
+      <div class="search-wrap"><i class="ti ti-search search-icon"></i><input type="text" id="pickerQ" placeholder="Search..."></div>
     </div>
     <div class="picker-grid" id="pickerGrid"></div>
   </div>
@@ -492,7 +496,7 @@ function refreshInlineTags(cardId, container) {
     +t+'<button class="inline-tag-rm" data-card-id="'+cardId+'" data-tag="'+t+'" style="background:none;border:none;color:var(--lav500);cursor:pointer;font-size:10px;padding:0;line-height:1;margin-left:1px">×</button></span>'
   ).join('')
   + (cardTags.length < 5
-      ? '<input class="inline-tag-input" data-card-id="'+cardId+'" type="text" placeholder="+ tag" list="inlineTagList" style="border:1px dashed var(--borderl);border-radius:20px;padding:2px 8px;font-size:10px;font-family:var(--font);outline:none;background:none;color:var(--soft);width:70px;cursor:pointer" class="itag-inp-focus">'
+      ? '<input class="inline-tag-input" data-card-id="'+cardId+'" type="text" placeholder="+ tag anything" list="inlineTagList" style="border:1px dashed var(--borderl);border-radius:20px;padding:2px 8px;font-size:10px;font-family:var(--font);outline:none;background:none;color:var(--soft);width:70px;cursor:pointer" class="itag-inp-focus">'
       : '');
   // re-attach listeners
   wrap.querySelectorAll('.inline-tag-rm').forEach(btn => {
@@ -1134,103 +1138,6 @@ async function viewBinder(binderId, tab) {
     pgs += '</div><button class="add-pg-btn" data-a="add-page" data-id="'+binderId+'"><i class="ti ti-plus"></i> Add Page</button>';
     return hdr+tabs+pgs;
 
-  } else if (tab==='browse') {
-    const sortBy = document.getElementById('sortSel') ? document.getElementById('sortSel').value : 'rarity';
-    // Tag filter UI
-    const userTags = [...new Set([...S.allTags, ...PRESET_TAGS])].sort();
-    const activeTagFilter = S.browseTagFilter || '';
-    const tagFilterHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">'
-      +'<span style="font-size:12px;font-weight:700;color:var(--soft);white-space:nowrap">Filter by tag:</span>'
-      +'<select id="browseTagSel" class="fi" style="flex:1;max-width:240px;padding:6px 10px;font-size:12px">'
-      +'<option value="">All full art cards</option>'
-      +(S.allTags.length ? '<optgroup label="My Tags">'+S.allTags.map(t=>{
-          const count=Object.values(S.tags).filter(ts=>ts.includes(t)).length;
-          return '<option value="TAG:'+t+'"'+(activeTagFilter==='TAG:'+t?' selected':'')+'>'+t+' ('+count+' card'+(count!==1?'s':'')+')</option>';
-        }).join('')+'</optgroup>' : '')
-      +'<optgroup label="All Tag Ideas">'+PRESET_TAGS.map(t=>'<option value="TAG:'+t+'"'+(activeTagFilter==='TAG:'+t?' selected':'')+'>'+t+'</option>').join('')+'</optgroup>'
-      +'</select>'
-      +(activeTagFilter ? '<button class="btn" data-a="clear-tag-filter" style="padding:5px 10px;font-size:11px"><i class="ti ti-x"></i> Clear</button>' : '')
-      +'</div>';
-
-    let cards = [];
-    let subNote = '';
-    if (activeTagFilter && activeTagFilter.startsWith('TAG:')) {
-      const tag = activeTagFilter.slice(4);
-      const taggedIds = Object.entries(S.tags).filter(([,ts])=>ts.includes(tag)).map(([id])=>id);
-      if (taggedIds.length) {
-        cards = await fetchByIds(taggedIds);
-        subNote = '<p style="font-size:12px;color:var(--soft);margin-bottom:10px">'+cards.length+' card'+(cards.length!==1?'s':'')+' tagged "'+tag+'". Click any to add to next open slot.</p>';
-      } else {
-        subNote = '<p style="font-size:12px;color:var(--rose600);margin-bottom:10px;background:var(--rose100);padding:8px 12px;border-radius:8px">No cards tagged "'+tag+'" yet. Tag cards from their detail panel.</p>';
-      }
-    } else {
-      const allIds = [...new Set(b.pages.flat().filter(Boolean))];
-      let extraQ = '';
-      if (allIds.length) {
-        const seeds = await fetchByIds(allIds);
-        const allTypes = seeds.flatMap(c => cType(c));
-        if (allTypes.length) {
-          const topType = Object.entries(allTypes.reduce((m,t)=>{m[t]=(m[t]||0)+1;return m;},{}))
-            .sort((a,b)=>b[1]-a[1])[0];
-          if (topType) extraQ = 'types:'+topType[0];
-        }
-      }
-      const d = await fetchFullArt(extraQ, 1, 40);
-      cards = d.data || [];
-      subNote = '<p style="font-size:12px;color:var(--soft);margin-bottom:10px">Full art cards. Click any to add to the next open slot.</p>';
-    }
-
-    return hdr+tabs+tagFilterHTML+subNote+cardGrid(cards, { sortBy, binderId });
-
-  } else { // suggest
-    const allIds = [...new Set(b.pages.flat().filter(Boolean))];
-    if (!allIds.length) return hdr+tabs
-      +'<div class="empty-state"><i class="ti ti-wand"></i><p>Add some cards to this binder first, then come back here for suggestions based on your taste.</p></div>';
-    const seeds = await fetchByIds(allIds);
-    const signals = buildSignals(seeds);
-    const seedIdSet = new Set(allIds);
-    // fetch candidates based on top signal
-    const topArtist = Object.entries(signals.artists).sort((a,b)=>b[1]-a[1])[0];
-    const topType   = Object.entries(signals.types).sort((a,b)=>b[1]-a[1])[0];
-    const topSet    = Object.entries(signals.sets).sort((a,b)=>b[1]-a[1])[0];
-    const queries = [];
-    if (topArtist) queries.push('artist:"'+topArtist[0]+'"');
-    if (topSet)    queries.push('set.id:'+topSet[0]);
-    if (topType)   queries.push('types:'+topType[0]);
-    // Fetch from multiple signals, dedupe
-    const candidateMap = {};
-    await Promise.all(queries.map(async q => {
-      try {
-        const d = await fetchFullArt(q, 1, 30);
-        (d.data||[]).forEach(c => { if (!candidateMap[c.id]) candidateMap[c.id]=c; });
-      } catch(e) {}
-    }));
-    const candidates = Object.values(candidateMap);
-    const scored = candidates
-      .map(c => ({ c, score: scoreCandidate(c, signals, seedIdSet) }))
-      .filter(x => x.score >= 0)
-      .sort((a,b) => b.score-a.score);
-    const pending  = scored.filter(x => !S.votes[x.c.id]);
-    const accepted = scored.filter(x => S.votes[x.c.id]==='yes');
-    const rejected = scored.filter(x => S.votes[x.c.id]==='no');
-    const sigLabels = topSignalLabels(signals);
-    const banner = '<div class="suggest-banner">'
-      +'<div style="font-size:13px;font-weight:700;margin-bottom:4px">Suggestions based on your binder</div>'
-      +'<div style="font-size:12px;color:var(--soft);margin-bottom:8px">Matching by artist, set, type, rarity style, and Pokémon species. Fits adds to binder — Skip hides it.</div>'
-      +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">'
-      +'<span style="background:var(--green100);color:var(--green600);padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700">'+accepted.length+' saved</span>'
-      +'<span style="background:var(--rose100);color:var(--rose600);padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700">'+rejected.length+' skipped</span>'
-      +'<span style="background:var(--cream2);color:var(--soft);padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700">'+pending.length+' to review</span>'
-      +'</div>'
-      +'<div style="font-size:11px;color:var(--soft);margin-bottom:4px">Matching on:</div>'
-      +'<div class="suggest-signals">'
-      +sigLabels.map(s => '<span class="signal-chip on">'+s.label+'</span>').join('')
-      +'</div>'
-      +'</div>';
-    const body = pending.length
-      ? '<div class="cards-grid">'+pending.slice(0,24).map(x => cardHTML(x.c, { score: x.score, binderId, curate: true })).join('')+'</div>'
-      : '<div class="empty-state" style="padding:24px"><i class="ti ti-check"></i><p>All caught up! Add more cards to the binder to get fresh suggestions.</p></div>';
-    return hdr+tabs+banner+body;
   }
 }
 
@@ -1243,13 +1150,8 @@ function binderHeader(id, b) {
     +'</div></div>';
 }
 function binderTabs(id, active) {
-  return '<div class="binder-tabs">'
-    +[['layout','<i class="ti ti-book" style="font-size:12px"></i> Binder'],
-      ['browse','<i class="ti ti-search" style="font-size:12px"></i> Browse'],
-      ['suggest','<i class="ti ti-wand" style="font-size:12px"></i> Suggest']]
-    .map(([t,lbl]) => '<div class="btab'+(active===t?' active':'')+'" data-a="binder-tab" data-id="'+id+'" data-tab="'+t+'">'+lbl+'</div>')
-    .join('')
-    +'</div>';
+  // Only layout tab now — binder is built from collection, wanted, and tags
+  return '';
 }
 
 // ─── NAV ─────────────────────────────────────────────────────
@@ -1439,7 +1341,7 @@ function attachListeners() {
                 + cardTags.map(t => '<span style="background:var(--lav100);border:1px solid var(--lav300);color:var(--lav500);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:3px">'
                     +t+'<button class="inline-tag-rm" data-card-id="'+c.id+'" data-tag="'+t+'" style="background:none;border:none;color:var(--lav500);cursor:pointer;font-size:10px;padding:0;line-height:1;margin-left:1px">×</button></span>').join('')
                 + (cardTags.length < 5
-                    ? '<input class="inline-tag-input" data-card-id="'+c.id+'" type="text" placeholder="+ tag" list="inlineTagList" style="border:1px dashed var(--borderl);border-radius:20px;padding:2px 8px;font-size:10px;font-family:var(--font);outline:none;background:none;color:var(--soft);width:70px;cursor:pointer" class="itag-inp-focus">'
+                    ? '<input class="inline-tag-input" data-card-id="'+c.id+'" type="text" placeholder="+ tag anything" list="inlineTagList" style="border:1px dashed var(--borderl);border-radius:20px;padding:2px 8px;font-size:10px;font-family:var(--font);outline:none;background:none;color:var(--soft);width:70px;cursor:pointer" class="itag-inp-focus">'
                     : '')
                 + '</div>';
               return '<div class="sri" style="flex-direction:column;align-items:flex-start;gap:6px">'
@@ -1480,7 +1382,7 @@ function attachListeners() {
                     const cardTags = S.tags[c.id] || [];
                     const tagHTML = '<div class="inline-tags" data-card-id="'+c.id+'" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;align-items:center">'
                       + cardTags.map(t2 => '<span style="background:var(--lav100);border:1px solid var(--lav300);color:var(--lav500);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:3px">'+t2+'<button class="inline-tag-rm" data-card-id="'+c.id+'" data-tag="'+t2+'" style="background:none;border:none;color:var(--lav500);cursor:pointer;font-size:10px;padding:0;line-height:1;margin-left:1px">×</button></span>').join('')
-                      + (cardTags.length < 5 ? '<input class="inline-tag-input itag-inp-focus" data-card-id="'+c.id+'" type="text" placeholder="+ tag" list="inlineTagList" style="border:1px dashed var(--borderl);border-radius:20px;padding:2px 8px;font-size:10px;font-family:var(--font);outline:none;background:none;color:var(--soft);width:70px;cursor:pointer">' : '')
+                      + (cardTags.length < 5 ? '<input class="inline-tag-input itag-inp-focus" data-card-id="'+c.id+'" type="text" placeholder="+ tag anything" list="inlineTagList" style="border:1px dashed var(--borderl);border-radius:20px;padding:2px 8px;font-size:10px;font-family:var(--font);outline:none;background:none;color:var(--soft);width:70px;cursor:pointer">' : '')
                       + '</div>';
                     return '<div class="sri" style="flex-direction:column;align-items:flex-start;gap:6px">'
                       +'<div style="display:flex;align-items:center;gap:9px;width:100%">'
@@ -1813,14 +1715,45 @@ function closeDetail() { document.getElementById('detailOv').classList.remove('o
 
 // ─── PICKER ──────────────────────────────────────────────────
 async function openPicker(binderId, pi, si) {
-  S.picker={binderId,pi,si,cards:[]};
+  S.picker={binderId,pi,si,cards:[],source:'collection',tag:''};
   document.getElementById('pickerOv').classList.add('open');
   document.getElementById('pickerQ').value='';
-  const grid=document.getElementById('pickerGrid');
+  await loadPickerSource('collection');
+}
+
+async function loadPickerSource(source, tag) {
+  S.picker.source = source;
+  S.picker.tag = tag || '';
+  const grid = document.getElementById('pickerGrid');
+  const head = document.getElementById('pickerSourceTabs');
+  // rebuild tabs
+  if (head) {
+    const allTags = [...new Set([...S.allTags, ...Object.keys(S.tags).flatMap(id => S.tags[id])])].sort();
+    head.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--borderl)">'
+      +'<button class="btn'+(source==='collection'?' primary':'')+'" data-picker-src="collection" style="padding:4px 10px;font-size:11px"><i class="ti ti-check"></i> Collection</button>'
+      +'<button class="btn'+(source==='wanted'?' primary':'')+'" data-picker-src="wanted" style="padding:4px 10px;font-size:11px"><i class="ti ti-star"></i> Wanted</button>'
+      +(allTags.length ? '<select id="pickerTagSel" class="fi" style="padding:4px 10px;font-size:11px;flex:1;max-width:160px"><option value="">— By Tag —</option>'
+        +allTags.map(t=>'<option value="'+t+'"'+(source==='tag'&&S.picker.tag===t?' selected':'')+'>'+t+'</option>').join('')+'</select>' : '')
+      +'</div>';
+    head.querySelectorAll('[data-picker-src]').forEach(btn => {
+      btn.addEventListener('click', () => loadPickerSource(btn.dataset.pickerSrc));
+    });
+    const tagSel = document.getElementById('pickerTagSel');
+    if (tagSel) tagSel.addEventListener('change', () => { if(tagSel.value) loadPickerSource('tag', tagSel.value); });
+  }
   grid.innerHTML='<div style="padding:16px;color:var(--soft);font-size:13px;text-align:center">Loading...</div>';
-  const ids=Object.keys(S.collection);
-  if(!ids.length){grid.innerHTML='<div style="padding:16px;color:var(--soft);font-size:13px;text-align:center">Add cards to your collection first.</div>';return;}
-  S.picker.cards=await fetchByIds(ids);
+  let ids = [];
+  if (source === 'collection') ids = Object.keys(S.collection);
+  else if (source === 'wanted') ids = Object.keys(S.wanted);
+  else if (source === 'tag' && tag) ids = Object.entries(S.tags).filter(([,ts])=>ts.includes(tag)).map(([id])=>id);
+  if (!ids.length) {
+    const msg = source==='collection' ? 'No cards in your collection yet. Use Find Cards to add some.'
+              : source==='wanted'     ? 'No cards on your Wanted list yet.'
+              : 'No cards tagged "'+tag+'" yet.';
+    grid.innerHTML='<div style="padding:16px;color:var(--soft);font-size:13px;text-align:center">'+msg+'</div>';
+    return;
+  }
+  S.picker.cards = await fetchByIds(ids);
   renderPickerGrid(S.picker.cards);
 }
 function renderPickerGrid(cards) {
